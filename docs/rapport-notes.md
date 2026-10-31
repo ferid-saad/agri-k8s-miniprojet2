@@ -53,7 +53,84 @@ AgriIrrigation : suivi de l'irrigation de parcelles agricoles.
   nouveau dépôt Git dédié.
 
 ## 3. Phase 1 : conteneuriser et publier
-(à compléter)
+
+### Images
+| Composant | Image | Base | Utilisateur |
+|-----------|-------|------|-------------|
+| API | feridsaad/agri-api:1.0.0 | node:20-alpine | node (non-root) |
+| Frontend | feridsaad/agri-frontend:1.0.0 | nginxinc/nginx-unprivileged:1.27-alpine | nginx (non-root), port 8080 |
+| Base | postgres:16-alpine | image officielle | utilisateur de l'image |
+
+- Les images sont versionnées (tag 1.0.0), jamais `latest` (exigence E1).
+- Publication : Docker Hub, dépôts publics (option A du §6). Les nœuds k3s
+  récupèrent les images par Internet, sans identifiants.
+- Un fichier `.dockerignore` exclut `node_modules`, `tests` et `.git` du
+  contexte de construction de l'API.
+- Aucun secret dans les images : la configuration est injectée à l'exécution
+  par variables d'environnement.
+
+### Construction et vérification
+```
+docker build -t feridsaad/agri-api:1.0.0 app/api
+docker build -t feridsaad/agri-frontend:1.0.0 app/frontend
+docker run --rm --entrypoint id feridsaad/agri-api:1.0.0
+docker run --rm --entrypoint id feridsaad/agri-frontend:1.0.0
+docker push feridsaad/agri-api:1.0.0
+docker push feridsaad/agri-frontend:1.0.0
+```
+- Sortie de `id` pour l'API : (à coller, attendu uid=1000(node))
+- Sortie de `id` pour le frontend : (à coller, attendu uid=101(nginx))
+
+![non-root](./captures/non-root.png)
+
+- Capture Docker Hub avec le tag 1.0.0 : 
+
+![Dockerhub1.0.0](./captures/duckerhub.png)
+
+### Point de contrôle : l'image est accessible à tous les nœuds
+Un Pod du frontend a été forcé sur chaque nœud avec `--overrides` (nodeName) :
+```
+kubectl run test-front  --image=feridsaad/agri-frontend:1.0.0 --restart=Never
+kubectl run test-w2     --image=feridsaad/agri-frontend:1.0.0 --restart=Never \
+  --overrides='{"spec":{"nodeName":"worker2"}}'
+kubectl run test-master --image=feridsaad/agri-frontend:1.0.0 --restart=Never \
+  --overrides='{"spec":{"nodeName":"master"}}'
+kubectl get pods -o wide
+```
+Résultat : les trois Pods sont `Running` (1/1), sur worker1, worker2 et master.
+
+| Pod | Nœud | Statut |
+|-----|------|--------|
+| test-front | worker1 | Running |
+| test-w2 | worker2 | Running |
+| test-master | master | Running |
+
+Capture : ![Runnig sur les autres noeuds](/docs/captures/pod-test-sur-les-autres-noeuds.png)
+
+Image de l'API : un Pod de test a bien téléchargé l'image (événement
+« Successfully pulled »). Il s'arrête ensuite en erreur de démarrage, ce qui est
+attendu : l'API refuse de démarrer sans ses variables d'environnement `DB_*`
+(à confirmer par la sortie de `kubectl describe pod test-api`). Les Pods de
+test ont ensuite été supprimés.
+
+### Question : imagePullPolicy Always ou IfNotPresent, et risque du tag latest ?
+- `Always` interroge le registre à chaque démarrage de Pod : l'image est
+  vérifiée à chaque fois, mais le démarrage est plus lent et dépend du réseau
+  et de la disponibilité du registre.
+- `IfNotPresent` réutilise l'image déjà présente sur le nœud, ce qui est plus
+  rapide et fonctionne sans réseau, mais ne détecte pas une image modifiée sous
+  le même tag.
+- Le tag `latest` est mobile : il peut désigner des contenus différents selon
+  le moment et selon le nœud qui a téléchargé l'image. Les déploiements
+  deviennent non reproductibles, un retour en arrière est difficile, et deux
+  Pods du même Deployment peuvent exécuter des versions différentes. Kubernetes
+  applique d'ailleurs `Always` par défaut avec `latest`. Un tag de version fixe
+  garantit que tous les nœuds exécutent exactement la même image.
+
+### Difficultés rencontrées
+- `kubectl` lancé depuis un worker : refus de connexion, car l'API Kubernetes ne
+  tourne que sur le master.
+- (compléter si besoin)
 
 ## Tableau des exigences (preuves)
 | N° | Exigence | Preuve |
