@@ -1,0 +1,36 @@
+1. La base : démarrez agri-postgres dans Docker Desktop (port 5433). Vérifiez avec docker ps.
+
+2. L’API (terminal 1, laissez-le ouvert)
+
+powershell
+cd E:\Devops-2027\haythem-2027\mini-projet2-k8s\app\api
+$env:DB_HOST="127.0.0.1"; $env:DB_PORT="5433"; $env:DB_NAME="irrigation_db"
+$env:DB_USER="agri"; $env:DB_PASSWORD="<mot-de-passe>"; $env:API_PORT="3001"
+node src/server.js
+
+3. Une configuration nginx temporaire
+
+Créez ce fichier en dehors du dépôt, dans E:\Devops-2027\haythem-2027\local-nginx.conf, pour ne pas le committer :
+
+nginx
+server {
+  listen 80;
+  location / {
+    root /usr/share/nginx/html;
+    try_files $uri /index.html;
+  }
+  location /api/ {
+    proxy_pass http://host.docker.internal:3001/;
+  }
+}
+
+4. Le frontend (terminal 2)
+
+powershell
+cd E:\Devops-2027\haythem-2027
+docker run --rm --name agri-front-test -p 8081:80 `
+  -v "${PWD}\mini-projet2-k8s\app\frontend\public:/usr/share/nginx/html:ro" `
+  -v "${PWD}\local-nginx.conf:/etc/nginx/conf.d/default.conf:ro" `
+  nginx:alpine
+
+Ouvrez ensuite http://localhost:8081 dans votre navigateur.

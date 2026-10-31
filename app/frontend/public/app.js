@@ -78,7 +78,7 @@ function renderArrosages(arrosages) {
   const body = $('arrosages-body');
   body.replaceChildren();
   if (arrosages.length === 0) {
-    body.append(emptyRow(6, 'Aucun arrosage planifié.'));
+    body.append(emptyRow(7, 'Aucun arrosage planifié.'));
   }
   arrosages.forEach((a) => {
     const tr = document.createElement('tr');
@@ -107,13 +107,22 @@ function renderArrosages(arrosages) {
         ? '—'
         : (Number(a.volume_reel_l) - Number(a.volume_l)).toFixed(2);
 
+    const deleteButton = document.createElement('button');
+    deleteButton.type = 'button';
+    deleteButton.className = 'small danger';
+    deleteButton.textContent = 'Supprimer';
+    deleteButton.addEventListener('click', () => deleteArrosage(a));
+    const actionCell = document.createElement('td');
+    actionCell.append(deleteButton);
+
     tr.append(
       cell(a.date_arrosage),
       cell(a.parcelle_nom),
       cell(a.duree_min),
       cell(a.volume_l),
       reelCell,
-      cell(ecart)
+      cell(ecart),
+      actionCell
     );
     body.append(tr);
   });
@@ -147,6 +156,17 @@ async function deleteParcelle(parcelle) {
   }
 }
 
+async function deleteArrosage(arrosage) {
+  const question = `Supprimer l'arrosage du ${arrosage.date_arrosage} (${arrosage.parcelle_nom}) ?`;
+  if (!window.confirm(question)) return;
+  try {
+    await api(`${API_URL}/arrosages/${arrosage.id}`, { method: 'DELETE' });
+    showMessage('Arrosage supprimé.');
+    await loadArrosages();
+  } catch (err) {
+    showMessage(err.message, true);
+  }
+}
 async function saveReal(id, value) {
   if (value === '') {
     showMessage('Saisissez le volume réellement consommé.', true);

@@ -45,7 +45,7 @@ Le service utilise la même instance PostgreSQL que les autres services, avec sa
 ```bash
 docker run -d --name agri-postgres \
   -e POSTGRES_USER=agri \
-  -e POSTGRES_PASSWORD=agri123 \
+  -e POSTGRES_PASSWORD=<mot-de-passe> \
   -p 5433:5432 \
   -v agri-pgdata:/var/lib/postgresql/data \
   postgres:16-alpine
@@ -70,7 +70,7 @@ Les tables `parcelles` et `arrosages` sont créées automatiquement au démarrag
 | `DB_HOST` | Hôte PostgreSQL | `localhost` |
 | `DB_PORT` | Port PostgreSQL | `5433` |
 | `DB_USER` | Utilisateur PostgreSQL | `agri` |
-| `DB_PASSWORD` | Mot de passe PostgreSQL | `agri123` |
+| `DB_PASSWORD` | Mot de passe PostgreSQL | `<mot-de-passe>` |
 | `DB_NAME` | Nom de la base | `irrigation_db` |
 | `JWT_SECRET` | Secret de vérification des jetons JWT | `dev-secret-change-me` (développement uniquement) |
 

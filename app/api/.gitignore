@@ -147,3 +147,6 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# Secrets Kubernetes réels (jamais versionnés ; secret.example.yaml l'est)
+secret.yaml
