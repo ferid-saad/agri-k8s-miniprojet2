@@ -28,6 +28,21 @@ AgriIrrigation : suivi de l'irrigation de parcelles agricoles.
   
   ![interface](./captures/localhost-8081.png)
 
+
+  ![ajout](./captures/interface-ajout.png)
+
+
+  ![supprimer](./captures/crud-supprimer.png)
+
+  - Point de contrôle : création, lecture, modification (consommation réelle) et
+  suppression d'une parcelle et d'un arrosage vérifiées depuis l'interface, en
+  local, avec Docker Compose (captures : docs/captures/crud-modification.png,
+  docs/captures/crud-suppression.png)
+- Lancement des trois services : `docker compose up --build -d` ; API en non-root
+  (`id` -> uid=1000(node))
+- Difficulté : port 8081 déjà occupé par un conteneur de test, qui causait une
+  erreur 502 ; résolu en arrêtant ce conteneur et en recréant le frontend.
+
 - Question : pourquoi un secret ne doit-il jamais figurer dans le code ni dans l'image ?
   Réponse : le code est versionné et partagé, et une image peut être récupérée
   par quiconque y a accès. Un secret qui y figure reste lisible dans
