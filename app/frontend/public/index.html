@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AgriIrrigation</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <h1>AgriIrrigation</h1>
+  </header>
+
+  <main>
+    <p id="message" role="status"></p>
+
+    <div id="app-section">
+      <section>
+        <h2>Mes parcelles</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>N°</th><th>Nom</th><th>Surface (ha)</th><th>Culture</th><th>Action</th></tr>
+            </thead>
+            <tbody id="parcelles-body"></tbody>
+          </table>
+        </div>
+
+        <h3>Ajouter une parcelle</h3>
+        <form id="parcelle-form">
+          <label>Nom <input type="text" id="p-nom" required></label>
+          <label>Surface (hectares) <input type="number" id="p-surface" step="0.01" min="0.01" required></label>
+          <label>Culture <input type="text" id="p-culture" required></label>
+          <button type="submit">Ajouter la parcelle</button>
+        </form>
+      </section>
+
+      <section>
+        <h2>Mes arrosages</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th><th>Parcelle</th><th>Durée (min)</th>
+                <th>Prévu (L)</th><th>Réel (L)</th><th>Écart (L)</th>
+              </tr>
+            </thead>
+            <tbody id="arrosages-body"></tbody>
+          </table>
+        </div>
+
+        <h3>Planifier un arrosage</h3>
+        <form id="arrosage-form">
+          <label>Parcelle
+            <select id="a-parcelle" required></select>
+          </label>
+          <label>Date <input type="date" id="a-date" required></label>
+          <label>Durée (minutes) <input type="number" id="a-duree" min="1" required></label>
+          <label>Volume prévu (litres) <input type="number" id="a-volume" step="0.01" min="0.01" required></label>
+          <button type="submit">Planifier l'arrosage</button>
+        </form>
+      </section>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
