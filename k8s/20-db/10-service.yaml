@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: db
+  namespace: agri
+spec:
+  clusterIP: None
+  selector:
+    app: agri
+    tier: db
+  ports:
+    - port: 5432
+      targetPort: 5432
