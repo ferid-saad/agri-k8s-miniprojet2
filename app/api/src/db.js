@@ -15,6 +15,10 @@ const pool = new Pool({
   database: process.env.DB_NAME,
 });
 
+pool.on('error', (err) => {
+  console.error('Erreur sur une connexion inactive à la base :', err.message);
+});
+
 async function initDb() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS parcelles (
