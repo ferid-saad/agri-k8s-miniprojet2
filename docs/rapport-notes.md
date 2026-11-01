@@ -185,21 +185,78 @@ requests.cpu=0, limited: limits.cpu=4,requests.cpu=2
 - Difficultés : le modèle `secret.example.yaml` est rangé hors du dossier
   appliqué pour ne pas écraser le vrai Secret.
 
+## 6. Phase 4 : base de données en StatefulSet
+
+### Réalisation
+- Service headless `db` (clusterIP: None) : donne à la base un nom DNS stable
+  (`db`) utilisé par l'API dans `DB_HOST`
+- StatefulSet `db` : 1 réplica, image postgres:16-alpine
+  - identifiants lus depuis le Secret `db-credentials` (secretKeyRef) et nom de
+    la base depuis le ConfigMap `app-config` (configMapKeyRef) : aucun mot de
+    passe dans le manifeste
+  - `PGDATA=/var/lib/postgresql/data/pgdata` : sous-dossier du point de
+    montage, car PostgreSQL refuse de démarrer dans un dossier racine de volume
+    qui contient déjà `lost+found`
+  - readiness probe : `pg_isready`
+  - requests 100m / 256Mi, limits 500m / 512Mi (exigence E8)
+  - volumeClaimTemplates : PVC `data-db-0`, 1Gi, ReadWriteOnce, StorageClass
+    `local-path`
+- Labels du Pod : `app: agri`, `tier: db` (réutilisés par les NetworkPolicies
+  de la phase 10)
+- Manifestes : k8s/20-db/ (10-service.yaml, 20-statefulset.yaml)
+
+![Recap](./captures/recap-statefulset.png)
+
+### Preuves (exigence E5)
+`kubectl get pods,pvc,svc -n agri` :
+![pods-pvc-svc](./captures/pods-pvc-svc.png)
+
+| Ressource | État |
+|-----------|------|
+| pod/db-0 | 0/1 Running à 25 s, puis 1/1 Running à 58 s (readiness probe validée) |
+| persistentvolumeclaim/data-db-0 | Bound, 1Gi, RWO, local-path |
+| service/db | ClusterIP None (headless), port 5432/TCP |
+
+Capture : docs/captures/phase4-pods-pvc-svc.png
+
+Connexion à la base :
+
+    kubectl exec -it db-0 -n agri -- sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "\conninfo"'
+
+Sortie :
+![connexion à la base](./captures/connexion%20à%20la%20base.png)
+
+### Question : pourquoi un StatefulSet plutôt qu'un Deployment pour une base ?
+Un StatefulSet donne à chaque Pod une identité stable : un nom prévisible
+(`db-0`) et un nom DNS stable grâce au Service headless. Chaque Pod reçoit son
+propre volume, créé par `volumeClaimTemplates`, et ce même volume est
+rattaché de nouveau au même Pod lorsqu'il est recréé. Un Deployment crée des
+Pods interchangeables, aux noms aléatoires, sans lien garanti avec un volume
+précis : après une suppression, un nouveau Pod n'est pas assuré de retrouver
+les données. Les StatefulSets démarrent et s'arrêtent aussi dans un ordre
+défini, ce qui convient aux services qui gardent un état.
+
+### Difficultés rencontrées
+- (Le délai de démarrage de la première minute, le
+  temps de télécharger l'image et de créer le volume)
+
+
 ## Tableau des exigences (preuves)
+
 | N° | Exigence | Preuve |
 |----|----------|--------|
-| E1 | Images versionnées, accessibles à tous les nœuds | à compléter |
-| E2 | Namespace, ResourceQuota, LimitRange | à compléter |
-| E3 | ConfigMap et Secret | à compléter |
-| E4 | Aucun secret dans Git | .env dans .gitignore, .env.example versionné |
-| E5 | StatefulSet et Service headless | à compléter |
-| E6 | Persistance après suppression du Pod | à compléter |
-| E7 | L'API attend la base | à compléter |
-| E8 | requests et limits | à compléter |
-| E9 | Sondes readiness et liveness | /ready et /health existent (phase 0) |
-| E10 | Seul le frontend est exposé par l'Ingress | à compléter |
-| E11 | CronJob de sauvegarde et restauration | à compléter |
-| E12 | ServiceAccount dédié, compte de consultation | à compléter |
-| E13 | Durcissement des Pods | à compléter |
-| E14 | NetworkPolicies | à compléter |
-| E15 | Dépôt Git et README | ce dépôt |
+| E1 | Images versionnées, accessibles à tous les nœuds | Images `feridsaad/agri-api:1.0.0` et `feridsaad/agri-frontend:1.0.0` (jamais `latest`), publiques sur Docker Hub. Pods `Running` sur worker1, worker2 et master. Captures : [duckerhub.png](./captures/duckerhub.png), [pod-test-sur-les-autres-noeuds.png](./captures/pod-test-sur-les-autres-noeuds.png) |
+| E2 | Namespace dédié, ResourceQuota et LimitRange | Namespace `agri`, `agri-quota` (2 CPU / 2 Gi de requêtes, 4 CPU / 4 Gi de limites, 15 Pods, 4 PVC), `agri-limits` (défauts 50m/64Mi et 200m/256Mi). Un Pod sans `resources` reçoit ces valeurs ; un Pod trop gros est refusé (`exceeded quota`). Manifestes : `k8s/00-namespace/`. Captures : [quota-limitrange.png](./captures/quota-limitrange.png), [depassement-de-quota.png](./captures/depassement-de-quota.png) |
+| E3 | Paramètres non sensibles dans un ConfigMap, identifiants dans un Secret | ConfigMap `app-config` (DB_HOST, DB_PORT, DB_NAME, API_PORT) et Secret `db-credentials` (POSTGRES_USER, POSTGRES_PASSWORD), lus par le StatefulSet via `configMapKeyRef` et `secretKeyRef`. Manifestes : `k8s/10-config/`. Captures : [configmap-secret.png](./captures/configmap-secret.png) |
+| E4 | Aucun secret réel versionné dans Git | `.env` et `secret.yaml` dans `.gitignore` ; seuls `.env.example` et `k8s/10-config/examples/secret.example.yaml` (fausses valeurs) sont versionnés ; le Secret du cluster est créé à la main sur le master avec un mot de passe distinct de celui du `.env`. Réserve : un `.env` a été committé par erreur au début, retiré du suivi et son mot de passe n'est plus utilisé (voir difficultés de la phase 0) |
+| E5 | Base déployée par un StatefulSet avec volume persistant et Service headless | StatefulSet `db` avec `volumeClaimTemplates` (PVC `data-db-0`, 1Gi, `local-path`, `Bound`) et Service `db` en `clusterIP: None`. `db-0` passe en `1/1 Running`. Manifestes : `k8s/20-db/`. Captures : [pods-pvc-svc.png](./captures/pods-pvc-svc.png), [recap-statefulset.png](./captures/recap-statefulset.png) |
+| E6 | Les données survivent à la suppression du Pod de la base | à compléter (phase 7) |
+| E7 | L'API attend que la base soit prête | à compléter (phase 5) |
+| E8 | Chaque conteneur définit requests et limits | Base : requests 100m/256Mi, limits 500m/512Mi (`k8s/20-db/20-statefulset.yaml`). API et frontend : à compléter (phase 5) |
+| E9 | Readiness probe `/ready` et liveness probe `/health` sur l'API | Routes `/ready` et `/health` implémentées et testées (phase 0, [api-repond.png](./captures/api-repond.png)) ; sondes Kubernetes à compléter (phase 5). Base : readiness probe `pg_isready` en place |
+| E10 | Seul le frontend est exposé par un Ingress sur `app.k3s.local` | à compléter (phase 6) |
+| E11 | CronJob de sauvegarde et restauration testée | à compléter (phase 8) |
+| E12 | ServiceAccount dédié sans jeton monté, compte de consultation | à compléter (phase 9) |
+| E13 | Pods non-root, `allowPrivilegeEscalation: false`, capabilities supprimées | Images non-root (API uid 1000, frontend nginx-unprivileged), preuve : [non-root.png](./captures/non-root.png). Reste à appliquer dans les manifestes (phase 10) |
+| E14 | NetworkPolicies conformes à la matrice de flux | à compléter (phase 10) |
+| E15 | Manifestes rangés par dossier, dépôt Git, README de déploiement | Dépôt public https://github.com/ferid-saad/agri-k8s-miniprojet2, dossiers `k8s/00-namespace` à `k8s/40-security`, README avec ordre de déploiement. En cours : se complète jusqu'à la phase 10 |
