@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: agri
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: agri, tier: frontend }
+  template:
+    metadata:
+      labels: { app: agri, tier: frontend }
+    spec:
+      containers:
+        - name: frontend
+          image: feridsaad/agri-frontend:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: nginx-conf
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+          readinessProbe:
+            httpGet: { path: /, port: 8080 }
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests: { cpu: 50m, memory: 32Mi }
+            limits: { cpu: 100m, memory: 128Mi }
+      volumes:
+        - name: nginx-conf
+          configMap:
+            name: frontend-nginx
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-svc
+  namespace: agri
+spec:
+  selector: { app: agri, tier: frontend }
+  ports:
+    - port: 80
+      targetPort: 8080

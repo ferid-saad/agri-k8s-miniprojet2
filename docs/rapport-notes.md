@@ -240,7 +240,41 @@ défini, ce qui convient aux services qui gardent un état.
 - (Le délai de démarrage de la première minute, le
   temps de télécharger l'image et de créer le volume)
 
+## Phase 5 : API et frontend
 
+### Réalisation
+- API : Deployment de 2 réplicas, image feridsaad/agri-api:1.0.0
+  - configuration par `envFrom` (ConfigMap `app-config`) et `secretKeyRef`
+    (Secret `db-credentials`, exposé sous DB_USER et DB_PASSWORD)
+  - init container `wait-for-db` (busybox, `nc -z db 5432`) : l'API ne démarre
+    pas tant que la base ne répond pas (exigence E7)
+  - readinessProbe `/ready`, livenessProbe `/health` (exigence E9)
+  - requests 50m/64Mi, limits 200m/256Mi ; init container 10m/16Mi, 50m/32Mi (E8)
+  - Service `api-svc` (ClusterIP, 3000)
+- Frontend : Deployment de 1 réplica, image feridsaad/agri-frontend:1.0.0
+  - configuration nginx dans le ConfigMap `frontend-nginx`, montée en fichier
+    avec `subPath` sur /etc/nginx/conf.d/default.conf ; `/api/` relayé vers
+    `api-svc:3000`
+  - readinessProbe sur `/`, requests 50m/32Mi, limits 100m/128Mi
+  - Service `frontend-svc` (ClusterIP, 80 vers 8080)
+- Manifestes : k8s/30-app/ (10-api.yaml, 20-frontend-config.yaml, 30-frontend.yaml)
+
+### Preuves
+- `kubectl get pods,svc -n agri` : (à coller) ; capture : docs/captures/phase5-pods.png
+- `kubectl logs deployment/api -n agri` : (à coller, « écoute sur le port 3000 »)
+- Chaîne complète : `curl http://frontend-svc/api/ready` -> {"status":"ready"}
+
+### Question : que fait Kubernetes de l'API tant que la readiness probe échoue ?
+Le Pod reste en `Running` mais est marqué non prêt (`0/1`) : Kubernetes le retire
+des endpoints du Service, il ne reçoit plus de trafic. Il n'est pas redémarré
+(c'est le rôle de la liveness probe). Dès que la probe réussit de nouveau, il
+est réintégré automatiquement. Démonstration : base arrêtée avec
+`kubectl scale statefulset db --replicas=0`, `/ready` renvoie 503, les Pods
+passent en 0/1 et la liste des endpoints de `api-svc` est vide ; la base
+relancée, tout revient sans intervention (capture : docs/captures/phase5-readiness.png).
+
+### Difficultés rencontrées
+- (à compléter)
 ## Tableau des exigences (preuves)
 
 | N° | Exigence | Preuve |
