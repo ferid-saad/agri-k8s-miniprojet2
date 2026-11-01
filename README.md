@@ -393,10 +393,36 @@ Capture : docs/captures/phase7-api.png
 
 ![reponce](/docs/captures/etape7-reponce.png)
 
+## Phase 8 : sauvegarde planifiée et restauration
+
+### Réalisation
+- PVC `backup-pvc` (1Gi, local-path) : volume dédié aux sauvegardes
+- CronJob `db-backup` : `pg_dump --clean --if-exists` toutes les 5 minutes
+  (démonstration), `concurrencyPolicy: Forbid`, historique de 3 Jobs réussis ;
+  connexion par PGHOST, PGUSER, PGPASSWORD (Secret) et PGDATABASE (ConfigMap) ;
+  requests 50m/64Mi, limits 200m/256Mi ; label `tier: backup`
+- Job de restauration `db-restore` (k8s/20-db/restore/, non appliqué
+  automatiquement) : recharge le dump le plus récent avec `psql`
+- Manifestes : k8s/20-db/ (30-backup-pvc.yaml, 40-cronjob-backup.yaml)
+
+### Preuves (exigence E11)
+- Test immédiat : `kubectl create job --from=cronjob/db-backup test-backup` ;
+  fichier `dump-AAAAMMJJ-HHMM.sql` créé : (à coller) ; capture : docs/captures/phase8-dump.png
+- Exécutions automatiques : Jobs `db-backup-*` en Completed : docs/captures/phase8-cronjob.png
+- Restauration : donnée supprimée, puis restaurée avec `db-restore` : données
+  retrouvées. Captures : docs/captures/phase8-avant.png, phase8-suppression.png,
+  phase8-restauration.png
+
+### Question : une sauvegarde sur le même nœud que la base protège-t-elle d'une panne de ce nœud ? Que proposer ?
+(texte de l'étape 7, adapté à votre constat sur les nœuds)
+
+### Difficultés rencontrées
+- backup-pvc reste en Pending jusqu'au premier Job (local-path attend un Pod
+  consommateur pour créer le volume)
+- (à compléter)
 
 ### Étapes suivantes (à compléter au fil des phases)
 
-- Phase 8 : CronJob de sauvegarde
 - Phase 9 : RBAC
 - Phase 10 : durcissement des Pods et NetworkPolicies
 
