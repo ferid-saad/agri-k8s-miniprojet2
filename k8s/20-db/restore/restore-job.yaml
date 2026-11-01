@@ -1,0 +1,41 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-restore
+  namespace: agri
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: { app: agri, tier: backup }
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: restore
+          image: postgres:16-alpine
+          command: ["/bin/sh", "-c"]
+          args:
+            - f=$(ls -t /backup/dump-*.sql | head -1) && echo "Restauration de $f" && psql -v ON_ERROR_STOP=1 -f "$f"
+          env:
+            - name: PGHOST
+              value: db
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef: { name: db-credentials, key: POSTGRES_USER }
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef: { name: db-credentials, key: POSTGRES_PASSWORD }
+            - name: PGDATABASE
+              valueFrom:
+                configMapKeyRef: { name: app-config, key: DB_NAME }
+          volumeMounts:
+            - name: backup
+              mountPath: /backup
+              readOnly: true
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { cpu: 200m, memory: 256Mi }
+      volumes:
+        - name: backup
+          persistentVolumeClaim:
+            claimName: backup-pvc
