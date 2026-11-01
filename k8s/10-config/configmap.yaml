@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: agri
+data:
+  DB_HOST: db
+  DB_PORT: "5432"
+  DB_NAME: irrigation_db
+  API_PORT: "3000"

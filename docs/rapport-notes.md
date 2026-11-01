@@ -164,6 +164,9 @@ requests.cpu=0, limited: limits.cpu=4,requests.cpu=2
 `kubectl get pods -n agri` : « No resources found » (le Pod n'a pas été créé).
 ![Depassement](./captures/depassement-de-quota.png)
 
+## 5. Phase 3 : Phase 3 : ConfigMap et Secret
+
+
 ## Tableau des exigences (preuves)
 | N° | Exigence | Preuve |
 |----|----------|--------|
