@@ -206,6 +206,40 @@ requests.cpu=0, limited: limits.cpu=4,requests.cpu=2
 - Manifestes : k8s/20-db/ (10-service.yaml, 20-statefulset.yaml)
 
 ![Recap](./captures/recap-statefulset.png)
+## Phase 6 : Ingress
+
+### Réalisation
+- Ingress `agri-ingress` (classe `traefik`, fournie par k3s) : hôte `app.k3s.local`,
+  chemin `/` vers `frontend-svc:80`
+- Manifeste : k8s/30-app/40-ingress.yaml
+- Windows : entrée `<IP> app.k3s.local` dans C:\Windows\System32\drivers\etc\hosts
+
+![hosts](./captures/etape6-fichier-hosts-windows.png)
+
+### Preuves (exigence E10)
+- `kubectl get ingress -n agri` : un seul Ingress, vers le frontend
+![ingress-class](./captures/etape6-ingressclass.png)
+- `kubectl get svc -n agri` : uniquement des ClusterIP (aucun NodePort ni LoadBalancer)
+- Interface ouverte sur http://app.k3s.local : 
+
+![Interface](./captures/etape6-ingress-success.png)
+
+- Données saisies visibles en base :
+
+![Interface](./captures/etape6-ajout-parcelle.png)
+
+![Interface](./captures/etape6-requete-SQL.png)
+ 
+
+### Question : pourquoi ne pas exposer aussi l'API et la base par l'Ingress ?
+
+La base n’a aucune raison d’être accessible depuis l’extérieur : son exposition ouvrirait directement les données à toute tentative de connexion.
+L’API n’est utilisée que par le frontend. La garder interne réduit la surface d’attaque : un seul composant à protéger, et un seul point où appliquer des règles (TLS, limitation de débit, journalisation).
+Le frontend joue le rôle de façade : il relaie /api/ en interne, donc le navigateur n’a jamais besoin d’adresser l’API directement, et il n’y a pas de problème de CORS.
+Cela prépare les NetworkPolicies (phase 10) : la matrice de flux n’autorise que Traefik vers le frontend.
+
+### Difficultés rencontrées
+- (à compléter)
 
 ### Preuves (exigence E5)
 `kubectl get pods,pvc,svc -n agri` :
