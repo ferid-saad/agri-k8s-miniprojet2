@@ -166,6 +166,24 @@ requests.cpu=0, limited: limits.cpu=4,requests.cpu=2
 
 ## 5. Phase 3 : Phase 3 : ConfigMap et Secret
 
+- ConfigMap `app-config` : DB_HOST (db), DB_PORT, DB_NAME, API_PORT
+- Secret `db-credentials` : POSTGRES_USER, POSTGRES_PASSWORD, créé avec
+  `kubectl create secret generic ... --dry-run=client -o yaml` ; le fichier
+  généré (secret.yaml) est ignoré par Git ; seul un modèle aux fausses valeurs
+  (k8s/10-config/examples/secret.example.yaml) est versionné (exigences E3 et E4)
+- Preuve : `git status` ne montre aucun secret ; `kubectl get secret` ; décodage base64
+
+![configmap-secret](./captures/configmap-secret.png)
+
+![secret codé no chifré](./captures/secret-codé.png)
+
+- Question : un Secret est-il chiffré ?
+  Réponse : non, il est seulement encodé en base64, donc lisible par quiconque
+  peut le lire via l'API. Pour qu'il reste confidentiel : limiter les droits
+  (RBAC), activer le chiffrement des Secrets au repos dans etcd, ne jamais
+  les versionner et restreindre l'accès au cluster.
+- Difficultés : le modèle `secret.example.yaml` est rangé hors du dossier
+  appliqué pour ne pas écraser le vrai Secret.
 
 ## Tableau des exigences (preuves)
 | N° | Exigence | Preuve |
