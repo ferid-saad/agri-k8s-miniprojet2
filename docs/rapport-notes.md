@@ -132,6 +132,38 @@ test ont ensuite été supprimés.
   tourne que sur le master.
 - (compléter si besoin)
 
+## 4. Phase 2 : Namespace, quotas et limites (séance 1)
+
+- `kubectl describe quota -n agri` :
+```
+Resource                Used  Hard
+limits.cpu              0     4
+limits.memory           0     4Gi
+persistentvolumeclaims  0     4
+pods                    0     15
+requests.cpu            0     2
+requests.memory         0     2Gi
+```
+- `kubectl describe limitrange -n agri` : défauts memory 64Mi / 256Mi, cpu 50m / 200m
+
+![quotas-limitrange](./captures/quota-limitrange.png)
+
+Pod sans resources (valeurs ajoutées par le LimitRange) :
+```
+{"limits":{"cpu":"200m","memory":"256Mi"},"requests":{"cpu":"50m","memory":"64Mi"}}
+```
+Le quota a alors enregistré : requests.cpu 50m, requests.memory 64Mi,
+limits.cpu 200m, limits.memory 256Mi, pods 1.
+
+Dépassement de quota :
+```
+Error from server (Forbidden): pods "trop-gros" is forbidden: exceeded quota:
+agri-quota, requested: limits.cpu=5,requests.cpu=3, used: limits.cpu=0,
+requests.cpu=0, limited: limits.cpu=4,requests.cpu=2
+```
+`kubectl get pods -n agri` : « No resources found » (le Pod n'a pas été créé).
+![Depassement](./captures/depassement-de-quota.png)
+
 ## Tableau des exigences (preuves)
 | N° | Exigence | Preuve |
 |----|----------|--------|
