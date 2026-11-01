@@ -236,9 +236,98 @@ Pourquoi un StatefulSet plutôt qu'un Deployment : identité stable (`db-0`), no
 DNS stable via le Service headless, et un volume propre à chaque Pod, rattaché
 de nouveau au même Pod après une suppression.
 
+### Étape 4 : API et frontend (phase 5)
+
+    kubectl apply -f k8s/30-app/
+    kubectl get pods,svc -n agri
+
+Les fichiers sont appliqués dans l'ordre : l'API et son Service d'abord, car
+nginx résout `api-svc` au démarrage et refuse de démarrer si ce nom n'existe pas.
+
+**API** (`k8s/30-app/10-api.yaml`)
+- Deployment de 2 réplicas, image `feridsaad/agri-api:1.0.1`
+- Configuration externalisée : `envFrom` sur le ConfigMap `app-config` (DB_HOST,
+  DB_PORT, DB_NAME, API_PORT) et `secretKeyRef` sur le Secret `db-credentials`
+  (exposé sous DB_USER et DB_PASSWORD)
+- Init container `wait-for-db` (busybox, `nc -z db 5432`) : l'API ne démarre pas
+  tant que la base ne répond pas (E7)
+- Sondes : readiness sur `/ready`, liveness sur `/health` (E9)
+- Ressources : API 50m/64Mi (requests) et 200m/256Mi (limits) ; init container
+  10m/16Mi et 50m/32Mi (E8)
+- Service `api-svc` (ClusterIP, 3000)
+
+**Frontend** (`k8s/30-app/20-frontend-config.yaml` et `30-frontend.yaml`)
+- Deployment de 1 réplica, image `feridsaad/agri-frontend:1.0.0`
+- Configuration nginx dans le ConfigMap `frontend-nginx`, montée en fichier avec
+  `subPath` sur `/etc/nginx/conf.d/default.conf` ; `/api/` est relayé vers
+  `api-svc:3000`
+- Readiness probe sur `/`, ressources 50m/32Mi et 100m/128Mi
+- Service `frontend-svc` (ClusterIP, 80 vers 8080)
+
+Remarque : un montage `subPath` n'est pas rafraîchi automatiquement. Après toute
+modification du ConfigMap `frontend-nginx` :
+
+    kubectl rollout restart deployment/frontend -n agri
+
+![Pods et Services](docs/captures/etape5-pods.png)
+![Quota consommé](docs/captures/etape5-quota.png)
+
+**Vérifications**
+
+    kubectl logs deployment/api -n agri
+    kubectl run curl-test --rm -it --image=curlimages/curl --restart=Never -n agri -- \
+      curl -s http://frontend-svc/api/ready
+
+Les logs doivent contenir « écoute sur le port 3000 », ce qui prouve la connexion
+à la base. Le `curl` doit renvoyer `{"status":"ready"}` : il traverse le Service
+du frontend, le proxy nginx, l'API et la base.
+
+![Réponse de la base](docs/captures/etape5-base-repond.png)
+
+**Comportement de la readiness probe**
+
+Tant que sa readiness probe échoue, un Pod reste en `Running` mais est marqué non
+prêt (`0/1`) : Kubernetes le retire des endpoints du Service et il ne reçoit plus
+de trafic. Il n'est pas redémarré, car c'est le rôle de la liveness probe. Dès
+que la probe réussit de nouveau, il est réintégré automatiquement.
+
+Démonstration avec la base arrêtée :
+
+    kubectl scale statefulset db --replicas=0 -n agri
+    kubectl get pods -n agri
+    kubectl get endpoints api-svc -n agri
+    kubectl scale statefulset db --replicas=1 -n agri
+
+Pendant la panne, `/ready` renvoie 503, les Pods de l'API passent en `0/1` et la
+liste des endpoints de `api-svc` est vide. La base relancée, tout revient sans
+intervention. Les données sont intactes, car le volume n'a pas été touché.
+
+![Readiness probe, base arrêtée](docs/captures/etape5-readiness-probe.png)
+![Retour à la normale](docs/captures/etape5-readiness-probe-reconstruit.png)
+
+**Incident rencontré et correction (image 1.0.1)**
+
+Avec la première version de l'API (`1.0.0`), arrêter la base faisait partir les
+Pods en `CrashLoopBackOff`. Le pool `pg` émet un événement `error` quand la base
+ferme ses connexions ; sans gestionnaire, Node arrête le processus. L'init
+container ne se rejoue pas au redémarrage d'un conteneur, donc l'API échouait
+en boucle tant que la base était absente. Un gestionnaire `pool.on('error')` a
+été ajouté dans `db.js` et l'image republiée en `1.0.1` (un tag publié n'est
+jamais réécrit). Une base arrêtée ne tue plus l'API : elle devient seulement
+non prête.
+
+En cas de problème :
+
+| Symptôme | Piste |
+|----------|-------|
+| `Init:0/1` qui dure | la base n'est pas prête : `kubectl logs db-0 -n agri` |
+| `CrashLoopBackOff` sur l'API | `kubectl logs <pod> -n agri` : variable manquante ou `password authentication failed` |
+| `password authentication failed` | le Secret ne correspond pas au mot de passe avec lequel la base a été initialisée (le volume garde l'ancien) |
+| Frontend en erreur `host not found in upstream` | `api-svc` n'existait pas au démarrage : `kubectl rollout restart deployment/frontend -n agri` |
+| Pod refusé à la création | quota dépassé : `kubectl describe quota -n agri` |
+
 ### Étapes suivantes (à compléter au fil des phases)
-- Phase 5 : déploiement de l'API (2 réplicas, init container, sondes
-  `/ready` et `/health`) et du frontend (configuration nginx dans un ConfigMap)
+
 - Phase 6 : Ingress sur `app.k3s.local`
 - Phase 7 : preuve de persistance (suppression de `db-0`)
 - Phase 8 : CronJob de sauvegarde
@@ -255,9 +344,9 @@ de nouveau au même Pod après une suppression.
 | E4 | Aucun secret réel dans Git | fait (voir section 9) |
 | E5 | StatefulSet et Service headless | fait (phase 4) |
 | E6 | Persistance après suppression du Pod | à venir (phase 7) |
-| E7 | L'API attend la base | à venir (phase 5) |
-| E8 | requests et limits | base faite, API et frontend à venir |
-| E9 | Sondes readiness et liveness | endpoints prêts, sondes à venir (phase 5) |
+| E7 | L'API attend la base | fait (phase 5, init container) |
+| E8 | requests et limits | fait pour la base, l'API et le frontend |
+| E9 | Sondes readiness et liveness | fait (phase 5) |
 | E10 | Seul le frontend exposé par l'Ingress | à venir (phase 6) |
 | E11 | CronJob de sauvegarde et restauration | à venir (phase 8) |
 | E12 | RBAC | à venir (phase 9) |
