@@ -376,7 +376,7 @@ Cela prépare les NetworkPolicies (phase 10) : la matrice de flux n’autorise q
 | E3 | ConfigMap et Secret | fait (phase 3) |
 | E4 | Aucun secret réel dans Git | fait (voir section 9) |
 | E5 | StatefulSet et Service headless | fait (phase 4) |
-| E6 | Persistance après suppression du Pod | à venir (phase 7) |
+| E6 | Les données survivent à la suppression du Pod de la base | `kubectl delete pod db-0` : `db-0` recréé avec le même PVC `data-db-0`, données identiques avant et après|
 | E7 | L'API attend la base | fait (phase 5, init container) |
 | E8 | requests et limits | fait pour la base, l'API et le frontend |
 | E9 | Sondes readiness et liveness | fait (phase 5) |
