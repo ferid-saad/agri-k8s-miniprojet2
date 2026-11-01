@@ -359,10 +359,43 @@ L’API n’est utilisée que par le frontend. La garder interne réduit la surf
 Le frontend joue le rôle de façade : il relaie /api/ en interne, donc le navigateur n’a jamais besoin d’adresser l’API directement, et il n’y a pas de problème de CORS.
 Cela prépare les NetworkPolicies (phase 10) : la matrice de flux n’autorise que Traefik vers le frontend.
 
+## Phase 7 : persistance et résilience
+
+### Test de persistance (exigence E6)
+1. Données saisies depuis l'interface : parcelle « Test-Persistance », un arrosage.
+2. État avant :
+
+![Test-persistance](/docs/captures/etape7-test-persistance.png)
+
+Requêtes SQL et `kubectl get pod db-0 -o wide`
+
+![RequeteSQL](/docs/captures/etape7-requete-SQL.png)
+
+  3. `kubectl delete pod db-0 -n agri` : le StatefulSet recrée `db-0` (même nom, même
+   PVC `data-db-0`), qui repasse en 1/1 Running.
+
+![delete pod db-0](/docs/captures/etape7-delete-pod-db0.png)
+
+4. État après : les mêmes lignes sont retrouvées, zéro donnée perdue ;
+
+![persistance](/docs/captures/etape7-persistance-de-donnees.png)
+
+5. Pendant la coupure, les Pods de l'API passent en 0/1 sans redémarrer et
+   reviennent seuls en 1/1.
+
+### Résilience de l'API
+Requêtes en continu à travers l'Ingress pendant la suppression d'un Pod de l'API :
+les réponses restent 200, l'autre réplica prend le relais et le Deployment recrée
+le Pod supprimé. (à compléter : nombre de réponses d'erreur éventuelles)
+Capture : docs/captures/phase7-api.png
+
+### Question : où sont physiquement les données avec local-path, et que se passe-t-il si le nœud tombe ?
+
+![reponce](/docs/captures/etape7-reponce.png)
+
+
 ### Étapes suivantes (à compléter au fil des phases)
 
-
-- Phase 7 : preuve de persistance (suppression de `db-0`)
 - Phase 8 : CronJob de sauvegarde
 - Phase 9 : RBAC
 - Phase 10 : durcissement des Pods et NetworkPolicies
