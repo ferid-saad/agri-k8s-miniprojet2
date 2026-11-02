@@ -11,6 +11,8 @@ spec:
     metadata:
       labels: { app: agri, tier: api }
     spec:
+      serviceAccountName: api-sa
+      automountServiceAccountToken: false
       initContainers:
         - name: wait-for-db
           image: busybox:1.36

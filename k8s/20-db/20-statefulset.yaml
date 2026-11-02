@@ -12,6 +12,8 @@ spec:
     metadata:
       labels: { app: agri, tier: db }
     spec:
+      serviceAccountName: db-sa
+      automountServiceAccountToken: false
       containers:
         - name: postgres
           image: postgres:16-alpine

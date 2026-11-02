@@ -11,6 +11,8 @@ spec:
     metadata:
       labels: { app: agri, tier: frontend }
     spec:
+      serviceAccountName: frontend-sa
+      automountServiceAccountToken: false
       containers:
         - name: frontend
           image: feridsaad/agri-frontend:1.0.0
