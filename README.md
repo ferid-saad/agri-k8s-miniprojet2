@@ -364,6 +364,12 @@ Cela prépare les NetworkPolicies (phase 10) : la matrice de flux n’autorise q
 ### Test de persistance (exigence E6)
 1. Données saisies depuis l'interface : parcelle « Test-Persistance », un arrosage.
 2. État avant :
+````
+kubectl exec -it db-0 -n agri -- sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT id, nom, culture FROM parcelles;" -c "SELECT count(*) FROM arrosages;"'
+kubectl get pod db-0 -n agri -o wide
+kubectl get pvc -n agri
+
+````
 
 ![Test-persistance](/docs/captures/etape7-test-persistance.png)
 
@@ -373,6 +379,10 @@ Requêtes SQL et `kubectl get pod db-0 -o wide`
 
   3. `kubectl delete pod db-0 -n agri` : le StatefulSet recrée `db-0` (même nom, même
    PVC `data-db-0`), qui repasse en 1/1 Running.
+   ````
+   kubectl exec -it db-0 -n agri -- sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT id, nom, culture FROM parcelles;" -c "SELECT count(*) FROM arrosages;"'
+kubectl get pvc -n agri
+````
 
 ![delete pod db-0](/docs/captures/etape7-delete-pod-db0.png)
 
